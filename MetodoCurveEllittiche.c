@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define BSB 1000 // B-smoothness bound
+#define B1 1000 // B-smoothness bound
 
 /* This struct define the structure of a point */
 struct point
@@ -61,7 +61,7 @@ void initialize(long *n, struct point **P, long *A, long *B, long *pi, int *expo
 	int i;
 	int j = 0;
 
-	for (i=2; i <= BSB; i++){
+	for (i=2; i <= B1; i++){
 
 		if (is_prime(i) == 1){
 			pi[j] = i;
@@ -72,7 +72,7 @@ void initialize(long *n, struct point **P, long *A, long *B, long *pi, int *expo
 
 	for (i = 0; i < j; i++) {
 		int m = 1;
-		while(pow(pi[i], m) <= BSB){
+		while(pow(pi[i], m) <= B1){
 			m++;
 		}
 		expo[i] = m - 1;
@@ -83,49 +83,35 @@ void initialize(long *n, struct point **P, long *A, long *B, long *pi, int *expo
 
 
 long mcd(long a, long b) {
-
-  long c;
-  if (a < 0)
-  	a = -a;
-
-  if (b < 0)
-  	b = -b;
-
-  while (a != 0) {
-
-  	c = a;
-  	a = b % a;
-  	b = c;
-
-  }
-  printf("b = %ld\n", b);
-  return b;
-}
-
-
-long inverse (long a, long n) {
-	long inv;							//qua salvo inverso di a
-	long i;								//indice del for
-	long cong;							//serve per trasformare numero negativo in positivo mod n
-
-	if (a < 0)							//controllo se a è negativo per assegnare a cong il suo congruo mod n
-		cong = n - a;
-	else
-		cong = a;
-
-
-	for (i = 1; i < n; i++) {			//cerco il primo i che moltiplicato per a mi dia resto 1 mod n
-		if (((cong*i) % n) == 1) {
-			inv = i;					//ho trovato l'inverso cercato mod n
-			printf("inverso di n %ld\n", inv);
-			return inv;					
-		}
+	if (a < 0){
+		a = b + a;
 	}
 
-	return -1;
-
+	return (b != 0)?mcd(b, a%b):a;
 }
 
+
+long inverse (long a, long b) {
+	long b0 = b, t, q;
+	long x0 = 0, x1 = 1;
+
+	a = a % b;
+	if (a < 0){
+		a = b + a;
+	}
+
+	if (mcd(a, b) != 1){
+		return -1;
+	}
+
+	while (a > 1) {
+		q = a / b;
+		t = b, b = a % b, a = t;
+		t = x0, x0 = x1 - q * x0, x1 = t;
+	}
+	if (x1 < 0) x1 += b0;
+	return x1;
+}
 
 
 short first_phase (long k, struct point *P, long A, long n, long *p, struct point *Q) {
@@ -154,10 +140,11 @@ short first_phase (long k, struct point *P, long A, long n, long *p, struct poin
 
 		if (i == 1) {		
 
-			a = inverse (2*(Q -> y), n);			// la funzione che controlla se esiste inverso
+			a = inverse (2*(Q -> y), n); // calcolo l'inverso se esiste
 			printf("inverso a = %ld nell'if\n", a);
 
-			if (a == -1) {						// non ho trovato inverso modulo n
+			/*  Se non trovo l'inverso */
+			if (a == -1) {						
 				a = 2*(Q -> y);
 				a = a % n;
 				gcd = mcd(a, n);
@@ -165,26 +152,16 @@ short first_phase (long k, struct point *P, long A, long n, long *p, struct poin
 				printf("mcd relativo ad a = %ld nell'if\n", gcd);
 			
 				if ((1 <= gcd) && (gcd <= n)) {
-					*p = gcd;					// fattore non banale di n
+					*p = gcd; // fattore non banale di n
 					res = 1;
-					return res;					// algoritmo ha avuto successo, maria io esco.
+					return res;	// algoritmo ha avuto successo, maria io esco.
 				}
 
 				
 			}
 
-			m = ((3*pow(Q -> x, 2) + A) * (a));
-			m = m % n;
-
-			Q -> x = pow(m, 2) - 2*(Q -> x);			// in Q salvo ogni volta quello che calcolo
-			Q -> x = (Q -> x) % n;
-
-			Q -> y = (-m)*(((Q -> x) - (P -> x)) + (P -> y));
-			Q -> y = (Q -> y) % n;
-
-			printf("Q -> x = %ld nell'if\n", Q -> x);
-			printf("Q -> y = %ld nell'if\n\n", Q -> y);			
-			
+			m = ((3*pow(P -> x, 2) + A) * (a)); // calcolo m = (3x^2 + A)(2y)^(-1)
+			m = m % n;		
 		}
 
 		else {									// caso in cui cambia m
@@ -192,8 +169,8 @@ short first_phase (long k, struct point *P, long A, long n, long *p, struct poin
 			a = inverse ((Q -> x) - (P -> x), n);
 			printf("inverso a = %ld nell'else\n", a);
 
-
-			if (a == -1) {						// non ho trovato inverso modulo n
+			/* se non trovo l'inverso */
+			if (a == -1) {						
 				a = (Q -> x) - (P -> x);
 				a = a % n;
 				gcd = mcd(a, n);
@@ -208,27 +185,28 @@ short first_phase (long k, struct point *P, long A, long n, long *p, struct poin
 				
 			}
 
-			m = ((Q -> y) - (P -> y)) * a;		//calcolo m = (y2-y1)*(x2-x1)
+			m = ((Q -> y) - (P -> y)) * a; //calcolo m = (y2-y1)*(x2-x1)
 			m = m % n;
-
-			Q -> x = pow(m, 2) - (Q -> x) - (P -> x);
-			Q -> x = (Q -> x ) % n;
-
-			Q -> y = -(m * ((Q -> x) - (P -> x)) + (P -> y));
-			Q -> y = (Q -> y ) % n;
-
-			printf("Q -> x = %ld nell'else\n", Q -> x);
-			printf("Q -> y = %ld nell'else\n\n", Q -> y);	
-
+		}
+		
+		Q -> x = pow(m, 2) - (Q -> x) - (P -> x);
+		Q -> x = (Q -> x) % n;
+		if (Q -> x < 0){
+			Q -> x = n + (Q -> x);
 		}
 
-		/*se arrivo qui significa che avrò un punto Q al finito che ho salvato come struttura e che userò
-		  nelle seconda fase */
-		
+		Q -> y = -(m * ((Q -> x) - (P -> x)) + (P -> y));
+		Q -> y = (Q -> y) % n;
+		if (Q -> y < 0){
+			Q -> y = n + (Q -> y);
+		}
 
+		printf("Q -> x = %ld\n", Q -> x);
+		printf("Q -> y = %ld\n\n", Q -> y);	
 	}
 
 	res = 0;
+	printf("Non ho trovato fattori non banali con questa curva e questo bound B\n");
 	return res;
 
 }
@@ -262,8 +240,8 @@ int main(void){
 	int *expo;
 	long *pi;
 
-	pi= malloc (BSB * sizeof(long));		
-	expo = malloc (BSB * sizeof(int));
+	pi= malloc (B1 * sizeof(long));		
+	expo = malloc (B1 * sizeof(int));
 
 
 	/* Initialize the main parameters of algorithm */
