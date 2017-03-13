@@ -1,15 +1,28 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
 #define B1 1000 // B-smoothness bound
 
 /* This struct define the structure of a point */
 struct point
 {
-	long x; // x-coordinate
-	long y; // y-coordinate
+	long long x; // x-coordinate
+	long long y; // y-coordinate
 };
+
+/* This function performs a modulus moltiplication to prevent overflow problems */
+long long mulmod(long long a, long long b, long long m){
+	long long r = 0;
+
+	while (b > 0) {
+        if (b & 1)  r = ((m-r) > a) ? r+a : r+a-m;    /* r = (r + a) % m */
+        b >>= 1;
+        if (b)      a = ((m-a) > a) ? a+a : a+a-m;    /* a = (a + a) % m */
+    }
+    return r;
+}
 
 int is_prime (int n) {	
 
@@ -18,10 +31,10 @@ int is_prime (int n) {
 	int i;
 
 	if (n == 1 || n == 2)
-			return 1;
+			return n;
 		
 
-	for (i = 2; i < n; i++){
+	for (i = 2; i < n/2; i++){
 
 		if (n % i == 0)
 			return 0;
@@ -31,20 +44,20 @@ int is_prime (int n) {
 	return n;
 }
 
-void initialize(long *n, struct point **P, long *A, long *B, long *temp1, int *temp2){
+void initialize(long long *n, struct point **P, long long *A, long long *B, long *temp1, int *temp2){
 	/* this function initialize the values needed for the algorithm */
 
-	long n1, n2;						// n1 and n2 are prime numbers that define n to factorize
+	long long n1, n2;						// n1 and n2 are prime numbers that define n to factorize
 	long factor;
 
 	printf ("Inserire numero primo n1: ");
-	if (!scanf("%ld", &n1)){
+	if (!scanf("%lld", &n1)){
 		fprintf(stderr, "Error in scan\n");
 		exit(EXIT_FAILURE);
 	}
 
 	printf ("Inserire numero primo n2: ");
-	if (!scanf ("%ld", &n2)){
+	if (!scanf ("%lld", &n2)){
 		fprintf (stderr, "Error in scan\n");
 		exit (EXIT_FAILURE);
 	}
@@ -56,6 +69,9 @@ void initialize(long *n, struct point **P, long *A, long *B, long *temp1, int *t
 		fprintf (stderr, "Error in point initialize\n");
 		exit (EXIT_FAILURE);
 	}
+
+	// Set random seed
+	srand(time(NULL)); 
 
 	(*P) -> x = rand() % *n;
 	(*P) -> y = rand() % *n;
@@ -89,12 +105,19 @@ void initialize(long *n, struct point **P, long *A, long *B, long *temp1, int *t
 		printf("temp2[%d] = %d\n", i, temp2[i]);
 	}
 
-	printf ("\n\nA = %ld, B = %ld, x0 = %ld, y0 = %ld\n\n", *A, *B, (*P) -> x, (*P) -> y);
+	printf ("\n\nA = %lld, B = %lld, x0 = %lld, y0 = %lld\n\n", *A, *B, (*P) -> x, (*P) -> y);
 }
 
 
-long mcd(long a, long b) {
+long mcd(long long a, long long b) {
 	/* this function calculate gcd between number a and number b */
+	if (a == 0){
+		return b;
+	}
+
+	if (b == 0){
+		return a;
+	}
 
 	if (a < 0)
 		a = b + a;
@@ -103,11 +126,11 @@ long mcd(long a, long b) {
 }
 
 
-long inverse (long a, long b) {
+long long inverse (long long a, long long b) {
 	/* this function calculate inverse of a modulus b */
 
-	long b0 = b, t, q;
-	long x0 = 0, x1 = 1;
+	long long b0 = b, t, q;
+	long long x0 = 0, x1 = 1;
 
 	a = a % b;
 	if (a < 0)
@@ -129,7 +152,8 @@ long inverse (long a, long b) {
 }
 
 
-short first_phase (long k, struct point *P, long A, long n, long *p, struct point *Q) {
+short first_phase (int r, struct point *P, long long A, long long n, long long *p, 
+	struct point *Q, long *pi, int *expo) {
 	
 	/* da quello che ho capito, facciamo (k * P) e ogni volta controlliamo se gcd (P -> y, n)!= 1;
 	   se è così allora continuiamo fino a fare (k * P) e non trovando nessuna P -> y invertibile
@@ -137,89 +161,91 @@ short first_phase (long k, struct point *P, long A, long n, long *p, struct poin
 	   una 2*(Q -> y) oppure ((Q -> x) - (P -> x)) che non ha inverso allora il gcd sarà il fattore 
 	   non banale trovato, quindi l'algoritmo ha successo e ritorniamo il gcd trovato. */
 
-	long a;									// indicate if a number has inverse or not
+	long long a;							// indicate if a number has inverse or not
 	short res;								// result of the first_phase
-	long gcd;								// value of mcd function between two numbers
-	long m;									// angular coefficient
+	long long gcd;							// value of mcd function between two numbers
+	long long m;									// angular coefficient
 	int i;									// index used in for cycle
 
-	printf("P = (%ld, %ld)\n", P -> x, P -> y);
+	printf("P = (%lld, %lld)\n", P -> x, P -> y);
 
 
 	Q -> x = P -> x;
 	Q -> y = P -> y;
 
-	printf("Q = (%ld, %ld)\n\n", Q -> x, Q -> y);
+	printf("Q = (%lld, %lld)\n\n", Q -> x, Q -> y);
 
 	
-	for (i = 1; i <= k; i++) {				
+	for (i = 0; i < r; i++) {				
+		long long k, power;
+		power = pow(pi[i], expo[i]);
+		for (k = 1; k <= power; k++){
+			if (((Q -> x) == (P -> x)) && ((Q -> y) == (P -> y))) {		
+				a = inverse (2 * (Q -> y), n); // calcolo l'inverso se esiste
 
-		if (i == 1) {		
+				/*  Se non trovo l'inverso */
+				if (a == -1) {	
+					printf ("%lld non ha inverso mod %lld nell'if\n", 2 * (Q -> y), n);
+						
+					a = 2*(Q -> y);
+					a = a % n;
+					gcd = mcd(a, n);
 
-			a = inverse (2 * (Q -> y), n); // calcolo l'inverso se esiste
+					printf ("gcd (%lld, %lld) = %lld nell'if\n",a, n, gcd);
+				
+					if ((1 <= gcd) && (gcd <= n)) {
+						*p = gcd; // fattore non banale di n
+						res = 1;
+						return res;	// algoritmo ha avuto successo, maria io esco.
+					}
+				}
 
-			/*  Se non trovo l'inverso */
-			if (a == -1) {	
-				printf ("%d. %ld non ha inverso mod %ld nell'if\n", i, 2 * (Q -> y), n);
+				printf ("Inverso di %lld mod %lld è a = %lld nell'if\n", 2 * (Q -> y), n, a);
+				
+
+				m = ((3 * pow(P -> x, 2) + A) * (a)); // calcolo m = (3x^2 + A)(2y)^(-1)
+				m = m % n;		
+			}
+
+			else {									
+				/* qui devo fare l'inverso di (x2-x1) quindi mi muovo diversamente*/
+				a = inverse ((Q -> x) - (P -> x), n);
+				printf ("Inverso di %lld mod %lld è a = %lld nell'else\n", (Q -> x) - (P -> x), n, a);
+
+				/* se non trovo l'inverso */
+				if (a == -1) {						
+					a = (Q -> x) - (P -> x);
+					a = a % n;
+					gcd = mcd(a, n);
+					printf ("gcd (%lld, %lld) = %lld nell'else\n", a, n, gcd);
+				
+					if ((1 <= gcd) && (gcd <= n)) {
+						*p = gcd;					// fattore non banale di n
+						printf ("Abbiamo trovato un fattore non banale con Q = (%lld, %lld)\n\n", Q -> x, Q -> y);
+						res = 1;
+						return res;					// algoritmo ha avuto successo, maria io esco.
+					}
 					
-				a = 2*(Q -> y);
-				a = a % n;
-				gcd = mcd(a, n);
-
-				printf ("%d gcd (%ld, %ld) = %ld nell'if\n", i, a, n, gcd);
-			
-				if ((1 <= gcd) && (gcd <= n)) {
-					*p = gcd; // fattore non banale di n
-					res = 1;
-					return res;	// algoritmo ha avuto successo, maria io esco.
 				}
 
-			printf ("%d. Inverso di %ld mod %ld è a = %ld nell'if\n", i, 2 * (Q -> y), n, a);
-				
+				m = mulmod((Q -> y) - (P -> y), a, n); 		//calcolo m = (y2-y1)*(x2-x1)
+				m = m % n;
 			}
-
-			m = ((3 * pow(P -> x, 2) + A) * (a)); // calcolo m = (3x^2 + A)(2y)^(-1)
-			m = m % n;		
-		}
-
-		else {									// caso in cui cambia m
-			/* qui devo farel'inverso di (x2-x1) quindi mi muovo diversamente*/
-			a = inverse ((Q -> x) - (P -> x), n);
-			printf ("%d. Inverso di %ld mod %ld è a = %ld nell'else\n", i, (Q -> x) - (P -> x), n, a);
-
-			/* se non trovo l'inverso */
-			if (a == -1) {						
-				a = (Q -> x) - (P -> x);
-				a = a % n;
-				gcd = mcd(a, n);
-				printf ("%d gcd (%ld, %ld) = %ld nell'else\n", i, a, n, gcd);
+				
+			Q -> x = mulmod(m, m, n) - (Q -> x) - (P -> x);
+			Q -> x = (Q -> x) % n;
+			if ((Q -> x) < 0)
+				Q -> x = n + (Q -> x);
 			
-				if ((1 <= gcd) && (gcd <= n)) {
-					*p = gcd;					// fattore non banale di n
-					printf ("%d. Abbiamo trovato un fattore non banale con Q = (%ld, %ld)\n\n", i, Q -> x, Q -> y);
-					res = 1;
-					return res;					// algoritmo ha avuto successo, maria io esco.
-				}
-				
-			}
 
-			m = ((Q -> y) - (P -> y)) * a; 		//calcolo m = (y2-y1)*(x2-x1)
-			m = m % n;
-		}
-		
-		Q -> x = pow(m, 2) - (Q -> x) - (P -> x);
-		Q -> x = (Q -> x) % n;
-		if ((Q -> x) < 0)
-			Q -> x = n + (Q -> x);
-		
+			Q -> y = -(mulmod(m, (Q -> x) - (P -> x) + (P -> y), n));
+			Q -> y = (Q -> y) % n;
+			if ((Q -> y) < 0)
+				Q -> y = n + (Q -> y);
+			
 
-		Q -> y = -(m * ((Q -> x) - (P -> x)) + (P -> y));
-		Q -> y = (Q -> y) % n;
-		if ((Q -> y) < 0)
-			Q -> y = n + (Q -> y);
-		
-
-		printf ("Q = (%ld, %ld)\n", Q -> x, Q -> y);
+			printf ("Q = (%lld, %lld)\n", Q -> x, Q -> y);
+		}	
 	}
 
 	res = 0;
@@ -229,62 +255,27 @@ short first_phase (long k, struct point *P, long A, long n, long *p, struct poin
 }
 
 
-long kvalue (long *pi, int *expo, long r) {
-
-	/* this function calculate the value of k, that indicates the number of time that should sum
-	   a point P in first phase of the algorithm. */
-
-	//int dim;									// dimension of the array pi/expo
-	int i;										// index in for cycle
-	long k = 1;									
-
-
-	//dim = ( sizeof(pi) / sizeof(long)) + 1;
-	printf ("Il numero di fattori primi è %ld.\n\n", r);
-
-	for (i = 0; i < r; i++) {
-		k = k * pow(pi[i], expo[i]);
-		printf("%d k = %ld\n", i, k);
-	}	
-	
-	
-	printf ("Si effettueranno al massimo k = %ld somme di P alla ricerca di fattori non banali.\n\n", k);
-	return k;
-}
-
-
 int main(void){
 	
-	long n, n1, n2; 						// Integer to be factored
-	struct point *P; 						// Random point P in Zn x Zn
-	long A; 								// Integer of elliptic curve
-	long B; 								// Integer of elliptic curve
-	long k; 								// Large B-smooth number
-	long delta; 							// Discriminant of elliptic curve
-	//int *expo;								// array of exponents for prime numbers of pi
-	//long *pi;								// array with prime numbers <= BSB
-	int i;									// index in for cycle
+	long long n, n1, n2; 			// Integer to be factored
+	struct point *P; 				// Random point P in Zn x Zn
+	long long A; 					// Integer of elliptic curve
+	long long B; 					// Integer of elliptic curve
+	long long delta; 				// Discriminant of elliptic curve
+
+	int i;							// index in for cycle
 	long temp1[B1*sizeof(long)];
 	int temp2[B1*sizeof(int)];
-
-	//printf("B1*sizeof(long) = %ld\n", B1*sizeof(long));
 	
-
-
-
-
 	/* Initialize the main parameters of algorithm */
 	initialize (&n, &P, &A, &B, temp1, temp2);
-	long r = 0;
+	int r = 0;
 	while (temp1[r] != 0)
 		r++;
-	printf("r = %ld\n", r);
-	//pi= malloc (r*sizeof(long));		
-	//expo = malloc (r*sizeof(int));
+	printf("r = %d\n", r);
+
 	long pi[r];
 	int expo[r];
-
-	//printf("dimensione pi = %ld\n", sizeof(&pi));
 
 	for (i = 0; i < r; i++) {
 		pi[i] = temp1[i];
@@ -293,20 +284,19 @@ int main(void){
 		printf ("Fattori primi pi[%d] = %ld,	con esponente expo[%d] = %d\n", i, pi[i], i, expo[i]);
 	}
 
-	k = kvalue (pi, expo, r);
 	delta = 4 * pow(A, 3) + 27 * pow(B, 2);
 
 	/* Check if the curve is an elliptic curve on Zn */
 	if ((delta % n) == 0){
-		printf ("This is not an elliptic curve on Z%ld\n", n);
+		printf ("This is not an elliptic curve on Z%lld\n", n);
 		return 0;
 	}
 
-	printf ("This is an elliptic curve on Z%ld\n", n);
+	printf ("This is an elliptic curve on Z%lld\n", n);
 
 	/* Start first phase */
 	short res;			// 0 or 1 to continue with second phase of to return p that is factor of n
-	long p;				// is a factor of n, if the algorithm has success
+	long long p;	// is a factor of n, if the algorithm has success
 	struct point *Q;	// is a finite point that is used in second phase
 
 	Q = malloc(sizeof(struct point));
@@ -315,22 +305,22 @@ int main(void){
 		exit (EXIT_FAILURE);
 	}
 
-	res = first_phase (k, P, A, n, &p, Q);
+	res = first_phase (r, P, A, n, &p, Q, pi, expo);
 
 	if (res == 1){
 
 		/* THE FIRST PHASE FINISHED CORRECTLY - RETURN p (factor of n) */
-		printf ("\t\t\t%ld è un fattore non banale di %ld\n", p, n);
+		printf ("\t\t\t%lld è un fattore non banale di %lld\n", p, n);
 
 	}
 
 	else {
 
 		/* THE FIRST PHASE IS FAILED - START WITH SECOND PHASE */
-		printf ("A = %ld, B = %ld.\n", A, B);
+		printf ("A = %lld, B = %lld.\n", A, B);
 
-		printf ("Non avendo trovato fattori non banali relativi alla curva \nY^2 = X^3 + (%ld)*X + (%ld) e bound B1 %d, \n", A, B, B1);
-		printf ("la prima fase è fallita, procediamo con la seconda fase partendo\n dal punto al finito Q = (%ld, %ld).\n", (Q -> x), (Q -> y));
+		printf ("Non avendo trovato fattori non banali relativi alla curva \nY^2 = X^3 + (%lld)*X + (%lld) e bound B1 %d, \n", A, B, B1);
+		printf ("la prima fase è fallita, procediamo con la seconda fase partendo\n dal punto al finito Q = (%lld, %lld).\n", (Q -> x), (Q -> y));
 
 	}
 
